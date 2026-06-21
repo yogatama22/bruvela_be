@@ -1,0 +1,727 @@
+================================================================
+  BRUVELA BAKEHOUSE — RENCANA APLIKASI MANAJEMEN TOKO
+  Stack: Nuxt.js 3 + Golang (Gin/Fiber) + PostgreSQL
+================================================================
+
+RINGKASAN PROYEK
+----------------
+Digitalisasi sistem manajemen toko Bruvela Bakehouse yang mencakup:
+- Data pemesanan (order tracking)
+- Data resep & HPP (Harga Pokok Produksi)
+- Inventory bahan baku
+- Keuangan per batch produksi
+- Dashboard analitik
+
+Manfaat ganda: solusi nyata untuk UMKM + portofolio freelance programmer
+
+
+================================================================
+  TECH STACK
+================================================================
+
+FRONTEND: Nuxt.js 3
+  - Composition API + <script setup>
+  - Pinia (state management: stok, order, keuangan)
+  - Tailwind CSS (UI styling)
+  - Chart.js / ApexCharts (grafik omzet, HPP, stok)
+  - @vueuse/core (utilitas reaktif)
+  - nuxt-auth-utils (autentikasi)
+
+BACKEND: Golang
+  - Framework  : Gin (ringan, performa tinggi)
+               ATAU Fiber (sintaks mirip Express.js)
+  - ORM        : GORM (query PostgreSQL)
+  - Auth       : JWT token (golang-jwt/jwt)
+  - Export     : excelize (generate laporan Excel)
+  - Validation : go-playground/validator
+  - CORS       : gin-contrib/cors
+  - Env Config : godotenv / viper
+
+DATABASE: PostgreSQL
+  - Relasi lengkap antar tabel (order, bahan, resep, finance)
+  - GORM migrations
+
+CACHE: Redis via Upstash (gratis)
+  - Session user
+  - Cache stok & dashboard summary
+
+STORAGE: Supabase Storage (gratis 1GB)
+  - Foto produk
+  - File laporan PDF/Excel
+
+
+================================================================
+  DEPLOY - SEMUA GRATIS
+================================================================
+
+  Komponen         Platform           Free Tier
+  ─────────────── ────────────────── ───────────────────────────
+  Nuxt.js          Vercel             Unlimited deploy + domain
+  Golang API       Railway.app        5 USD credit/bulan (cukup dev)
+  PostgreSQL       Railway/Supabase   500MB gratis
+  Redis            Upstash            10.000 req/hari gratis
+  File Storage     Supabase Storage   1GB gratis
+  CI/CD            GitHub Actions     2.000 menit/bulan gratis
+
+
+================================================================
+  5 MODUL APLIKASI — DETAIL FITUR
+================================================================
+
+──────────────────────────────────────────────────────────────
+MODUL 1: PEMESANAN (Order Management)
+──────────────────────────────────────────────────────────────
+Berdasarkan data: Sheet "Pemesanan B3" (68+ transaksi aktual)
+
+Fitur:
+  [1] Input Order Baru
+      - Nama customer, tanggal, varian, qty box
+      - Harga/box, diskon, ongkir
+      - Channel: Instagram, WhatsApp, Offline, Titip Teman
+      - Lokasi: Dalam Kota / Luar Kota / JNT
+      - Catatan tambahan
+
+  [2] Status Tracking (alur produksi)
+      Baru -> Diproses -> Siap Kirim -> Selesai
+                                     -> Batal
+
+  [3] Status Pembayaran
+      Belum Bayar -> DP -> Lunas
+
+  [4] Filter & Search
+      - Per tanggal range
+      - Per status order / bayar
+      - Per channel / lokasi
+      - Per nama customer
+
+  [5] Bulk Order Support
+      - 1 customer bisa pesan banyak varian
+        Contoh: Teto = 4 varian sekaligus
+      - Order items sebagai sub-tabel
+
+  [6] Cetak Nota
+      - PDF auto-generate per order
+      - QR code opsional
+
+  [7] Summary Harian
+      - Total order, omzet, pending per hari
+
+
+──────────────────────────────────────────────────────────────
+MODUL 2: RESEP & MENU (Recipe Management)
+──────────────────────────────────────────────────────────────
+Berdasarkan data: Sheet "Resep_Bahan" (8 varian, 22 bahan)
+
+Produk aktual Bruvela:
+  BRV-CLASSIC     | Bruv Classic      | Rp 20.000/box
+  BRV-ALMOND      | Bruv Almond       | Rp 22.000/box
+  BRV-CHEESE      | Bruv Cheese       | Rp 22.000/box
+  BRV-COOKIES     | Bruv Cookies      | Rp 23.000/box
+  BRV-CLASSIC-LG  | Bruv Classic Lrg  | Rp 80.000/box
+  BRV-ALMOND-LG   | Bruv Almond Lrg   | Rp 88.000/box
+  BRV-CHEESE-LG   | Bruv Cheese Lrg   | Rp 88.000/box
+  BRV-COOKIES-LG  | Bruv Cookies Lrg  | Rp 92.000/box
+  BRV-MIX-LG      | Bruv Mix Large    | Rp 87.000/box
+
+Fitur:
+  [1] Master Menu (CRUD)
+      - Kode, nama varian, harga/box, isi/box, status aktif
+
+  [2] Komposisi Resep per Varian
+      - Bahan, qty per box, satuan pakai (gram/pcs/butir)
+      - Harga per satuan (auto dari master bahan)
+
+  [3] Auto-kalkulasi HPP
+      - HPP per box = jumlah (qty bahan x harga/satuan)
+      - Contoh: Bruv Classic HPP sekitar Rp 12.972/box, jual Rp 20.000
+
+  [4] Margin Analyzer
+      - Harga jual vs HPP per varian
+      - Persentase margin otomatis
+      - Peringatan jika margin di bawah threshold
+
+  [5] Kalkulator Produksi
+      - Input: target qty box produksi
+      - Output: daftar kebutuhan bahan + estimasi total biaya
+
+
+──────────────────────────────────────────────────────────────
+MODUL 3: INVENTORY (Stock Management)
+──────────────────────────────────────────────────────────────
+Berdasarkan data: Sheet "Master Bahan" (22 bahan, banyak kritis)
+
+Bahan kritis aktual (stok di bawah minimum):
+  Butter        | Stok: 45g    | Min: 200g  <- RESTOCK
+  Gula          | Stok: 87.5g  | Min: 500g  <- RESTOCK
+  Telur         | Stok: 2.5    | Min: 10    <- RESTOCK
+  Cocoa Powder  | Stok: 10g    | Min: 100g  <- RESTOCK
+  Almond Slice  | Stok: 12.5g  | Min: 100g  <- RESTOCK
+  Keju          | Stok: 80g    | Min: 100g  <- RESTOCK
+  Box           | Stok: -61    | Min: 10    <- MINUS!
+  Kertas Roti   | Stok: -31    | Min: 10    <- MINUS!
+
+Fitur:
+  [1] Master Bahan (CRUD)
+      - Nama, satuan pack, isi/pack, satuan pakai
+      - Harga beli/pack, harga per satuan pakai
+      - Stok minimum (threshold restock)
+
+  [2] Tracking Stok Real-time
+      - Stok awal batch
+      - Bahan masuk (pembelian)
+      - Bahan terpakai (auto-deduct saat order diproses)
+      - Stok akhir
+
+  [3] Alert Restock Otomatis
+      - Notifikasi in-app saat stok di bawah minimum
+      - Badge merah di menu Inventory
+      - Email / WhatsApp notification (opsional)
+
+  [4] Pencatatan Pembelian Bahan
+      - Log per tanggal, supplier, qty, harga total
+      - Histori pembelian per bahan
+
+  [5] Auto-deduct Stok
+      - Stok berkurang otomatis berdasarkan resep
+      - Dipicu saat status order berubah ke "Diproses"
+
+  [6] Laporan Pemakaian
+      - Bahan paling boros per batch
+      - Cost bahan per periode
+
+
+──────────────────────────────────────────────────────────────
+MODUL 4: FINANCE (Keuangan)
+──────────────────────────────────────────────────────────────
+Berdasarkan data: Jurnal di sheet "Pembelian_Bahan"
+
+Histori jurnal aktual Bruvela:
+  Uang Modal Aul         : + Rp    789.000
+  Uang Modal Dhavinna    : + Rp    789.000
+  Pengeluaran Batch 1    : - Rp  1.578.000
+  Pembayaran Batch 1     : + Rp  1.989.000
+  Pengeluaran Batch 2    : - Rp  1.059.476
+  Pendapatan Batch 2     : + Rp  1.960.000
+  Pembelian Packaging    : - Rp    228.373
+  TF Rekening Aul 1      : - Rp    330.000
+  TF Rekening Dhavinna 1 : - Rp    330.000
+  Pengeluaran Batch 3    : - Rp    978.000
+  Pendapatan Batch 3     : + Rp    173.000 (masih berjalan)
+
+Fitur:
+  [1] Jurnal Kas
+      - Catat pemasukan & pengeluaran per transaksi
+      - Kategori: Modal, Pendapatan, Pengeluaran Bahan, Transfer
+
+  [2] Laporan Per Batch
+      - Total modal masuk
+      - Total pengeluaran bahan
+      - Total pendapatan
+      - Laba/rugi per batch
+
+  [3] Laporan Laba Rugi
+      - Omzet produk - HPP - Pengeluaran = Laba Bersih
+
+  [4] Multi-Partner Support
+      - Tracking modal per partner (Aul, Dhavinna)
+      - Pembagian profit per batch
+
+  [5] Export Laporan
+      - Download Excel (excelize library)
+      - Download PDF
+      - Filter per batch / periode
+
+  [6] Dashboard Keuangan
+      - Grafik pendapatan per batch
+      - Grafik HPP vs omzet
+      - Tren laba
+
+
+──────────────────────────────────────────────────────────────
+MODUL 5: DASHBOARD & ANALITIK
+──────────────────────────────────────────────────────────────
+
+Summary Batch 3 aktual:
+  Total Order   : 72
+  Box Terjual   : 119
+  Omzet         : Rp 2.844.000
+  Total Tagihan : Rp 2.798.000
+  Sudah Lunas   : Rp 2.561.000
+  Belum/DP      : Rp   237.000
+  Estimasi HPP  : Rp 1.675.102
+  Estimasi Laba : Rp 1.122.897
+
+Penjualan per Varian (Batch 3):
+  Bruv Cheese   : 36 box (terbanyak)
+  Bruv Almond   : 35 box
+  Bruv Classic  : 26 box
+  Bruv Cookies  : 18 box
+  Bruv Mix Lg   :  4 box
+
+Fitur:
+  [1] Summary Cards
+      - Total order, omzet, lunas, pending
+      - Laba kotor estimasi real-time
+
+  [2] Grafik Penjualan
+      - Per varian, per hari, per channel
+
+  [3] Status Order Widget
+      - Baru: 54 | Diproses: 0 | Siap Kirim: 2 | Selesai: 12
+
+  [4] Pengiriman Stats
+      - Dalam Kota: 94 | Luar Kota: 25
+
+  [5] Restock Alert Widget
+      - List bahan kritis dengan status warna (Hijau/Merah)
+
+  [6] Export Data
+      - Export tabel order ke Excel
+      - Export dashboard summary ke PDF
+
+
+================================================================
+  ERD DATABASE SCHEMA (LENGKAP)
+================================================================
+
+Catatan: UUID digunakan sebagai primary key di semua tabel.
+         TIMESTAMP mencakup created_at dan updated_at.
+
+────────────────────────────────────────
+TABEL: users
+────────────────────────────────────────
+  id          UUID          PRIMARY KEY
+  name        VARCHAR(100)  NOT NULL
+  email       VARCHAR(100)  UNIQUE NOT NULL
+  password    VARCHAR(255)  NOT NULL
+  role        VARCHAR(20)   DEFAULT 'staff'
+              -- nilai: admin, staff
+  created_at  TIMESTAMP
+  updated_at  TIMESTAMP
+
+────────────────────────────────────────
+TABEL: products (master menu)
+────────────────────────────────────────
+  id          UUID          PRIMARY KEY
+  code        VARCHAR(20)   UNIQUE NOT NULL
+              -- contoh: BRV-CLASSIC, BRV-ALMOND
+  name        VARCHAR(100)  NOT NULL
+              -- contoh: Bruv Classic
+  price       INTEGER       NOT NULL
+              -- harga per box dalam Rupiah
+  pcs_per_box INTEGER       DEFAULT 1
+  status      VARCHAR(20)   DEFAULT 'active'
+              -- nilai: active, inactive
+  created_at  TIMESTAMP
+  updated_at  TIMESTAMP
+
+────────────────────────────────────────
+TABEL: ingredients (master bahan baku)
+────────────────────────────────────────
+  id              UUID           PRIMARY KEY
+  name            VARCHAR(100)   NOT NULL
+  pack_unit       VARCHAR(20)    NOT NULL
+                  -- satuan beli: kg, pcs, lembar
+  qty_per_pack    DECIMAL(10,3)  NOT NULL
+                  -- isi per pack (misal: 1000 untuk 1kg)
+  use_unit        VARCHAR(20)    NOT NULL
+                  -- satuan pakai: gram, butir, pcs, lembar
+  price_per_pack  INTEGER        NOT NULL
+  price_per_use   DECIMAL(10,4)
+                  -- auto-kalkulasi: price_per_pack / qty_per_pack
+  min_stock       DECIMAL(10,3)  DEFAULT 0
+                  -- threshold untuk alert restock
+  current_stock   DECIMAL(10,3)  DEFAULT 0
+                  -- stok saat ini (update otomatis)
+  created_at      TIMESTAMP
+  updated_at      TIMESTAMP
+
+────────────────────────────────────────
+TABEL: recipes (komposisi resep per produk)
+────────────────────────────────────────
+  id              UUID           PRIMARY KEY
+  product_id      UUID           FK -> products(id)
+  ingredient_id   UUID           FK -> ingredients(id)
+  qty_per_box     DECIMAL(10,3)  NOT NULL
+                  -- jumlah bahan per 1 box produk
+  use_unit        VARCHAR(20)    NOT NULL
+  cost_per_box    DECIMAL(10,4)
+                  -- auto: qty_per_box x ingredients.price_per_use
+  created_at      TIMESTAMP
+  updated_at      TIMESTAMP
+
+  UNIQUE KEY: (product_id, ingredient_id)
+
+────────────────────────────────────────
+TABEL: customers
+────────────────────────────────────────
+  id          UUID          PRIMARY KEY
+  name        VARCHAR(100)  NOT NULL
+  phone       VARCHAR(20)
+  location    VARCHAR(200)
+  note        TEXT
+  created_at  TIMESTAMP
+  updated_at  TIMESTAMP
+
+────────────────────────────────────────
+TABEL: batches (periode/batch produksi)
+────────────────────────────────────────
+  id             UUID          PRIMARY KEY
+  batch_number   INTEGER       UNIQUE NOT NULL
+                 -- 1, 2, 3, dst
+  name           VARCHAR(100)
+                 -- contoh: Batch 3
+  start_date     DATE          NOT NULL
+  end_date       DATE
+  status         VARCHAR(20)   DEFAULT 'open'
+                 -- nilai: open, closed
+  total_modal    INTEGER       DEFAULT 0
+  total_revenue  INTEGER       DEFAULT 0
+  total_hpp      INTEGER       DEFAULT 0
+  gross_profit   INTEGER       DEFAULT 0
+                 -- auto: total_revenue - total_hpp
+  created_at     TIMESTAMP
+  updated_at     TIMESTAMP
+
+────────────────────────────────────────
+TABEL: orders
+────────────────────────────────────────
+  id             UUID          PRIMARY KEY
+  batch_id       UUID          FK -> batches(id)
+  customer_id    UUID          FK -> customers(id) NULLABLE
+  customer_name  VARCHAR(100)
+                 -- disimpan langsung (jika customer tidak terdaftar)
+  order_date     DATE          NOT NULL
+  channel        VARCHAR(30)   DEFAULT 'whatsapp'
+                 -- nilai: instagram, whatsapp, offline, titip_teman
+  shipping_type  VARCHAR(20)
+                 -- nilai: dalam_kota, luar_kota
+  shipping_dest  VARCHAR(200)
+                 -- JNT, Juanda, Mess Jakarta, dst
+  shipping_cost  INTEGER       DEFAULT 0
+  discount       INTEGER       DEFAULT 0
+  total_product  INTEGER       DEFAULT 0
+                 -- jumlah dari order_items
+  total_bill     INTEGER       DEFAULT 0
+                 -- total_product + shipping_cost - discount
+  pay_status     VARCHAR(20)   DEFAULT 'belum_bayar'
+                 -- nilai: belum_bayar, dp, lunas
+  prod_status    VARCHAR(20)   DEFAULT 'baru'
+                 -- nilai: baru, diproses, siap_kirim, selesai, batal
+  note           TEXT
+  created_by     UUID          FK -> users(id)
+  created_at     TIMESTAMP
+  updated_at     TIMESTAMP
+
+────────────────────────────────────────
+TABEL: order_items
+────────────────────────────────────────
+  id            UUID     PRIMARY KEY
+  order_id      UUID     FK -> orders(id) ON DELETE CASCADE
+  product_id    UUID     FK -> products(id)
+  product_code  VARCHAR(20)
+  product_name  VARCHAR(100)
+                -- disimpan snapshot saat order dibuat
+  qty_box       INTEGER  NOT NULL
+  price_per_box INTEGER  NOT NULL
+  subtotal      INTEGER  NOT NULL
+                -- qty_box x price_per_box
+  created_at    TIMESTAMP
+
+────────────────────────────────────────
+TABEL: ingredient_purchases (pembelian bahan)
+────────────────────────────────────────
+  id              UUID           PRIMARY KEY
+  batch_id        UUID           FK -> batches(id)
+  ingredient_id   UUID           FK -> ingredients(id)
+  purchase_date   DATE           NOT NULL
+  supplier        VARCHAR(100)
+  qty_pack        DECIMAL(10,3)  NOT NULL
+  price_per_pack  INTEGER        NOT NULL
+  total_price     INTEGER        NOT NULL
+                  -- qty_pack x price_per_pack
+  note            TEXT
+  created_by      UUID           FK -> users(id)
+  created_at      TIMESTAMP
+
+────────────────────────────────────────
+TABEL: stock_logs (log pergerakan stok)
+────────────────────────────────────────
+  id              UUID           PRIMARY KEY
+  ingredient_id   UUID           FK -> ingredients(id)
+  batch_id        UUID           FK -> batches(id)
+  log_type        VARCHAR(20)    NOT NULL
+                  -- nilai: in (beli), out (pakai), adjustment (koreksi)
+  qty             DECIMAL(10,3)  NOT NULL
+                  -- positif = masuk, negatif = keluar
+  stock_before    DECIMAL(10,3)
+  stock_after     DECIMAL(10,3)
+  reference_id    UUID
+                  -- order_id jika out, purchase_id jika in
+  reference_type  VARCHAR(20)
+                  -- 'order' atau 'purchase'
+  note            TEXT
+  created_by      UUID           FK -> users(id)
+  created_at      TIMESTAMP
+
+────────────────────────────────────────
+TABEL: journal_entries (jurnal keuangan)
+────────────────────────────────────────
+  id            UUID          PRIMARY KEY
+  batch_id      UUID          FK -> batches(id)
+  entry_date    DATE          NOT NULL
+  description   VARCHAR(255)  NOT NULL
+  type          VARCHAR(20)   NOT NULL
+                -- nilai: income, expense, modal, transfer
+  amount        INTEGER       NOT NULL
+                -- positif = masuk, negatif = keluar
+  balance       INTEGER
+                -- saldo setelah transaksi ini
+  partner       VARCHAR(100)
+                -- Aul / Dhavinna / dll (untuk multi-partner)
+  reference_id  UUID
+                -- order_id, purchase_id, dst
+  created_by    UUID          FK -> users(id)
+  created_at    TIMESTAMP
+
+
+================================================================
+  RELASI ANTAR TABEL (RINGKASAN)
+================================================================
+
+  users              --> orders              (1 user, banyak order)
+  users              --> journal_entries     (1 user, banyak jurnal)
+  users              --> ingredient_purchases
+  users              --> stock_logs
+  customers          --> orders              (1 customer, banyak order)
+  batches            --> orders              (1 batch, banyak order)
+  batches            --> ingredient_purchases
+  batches            --> journal_entries
+  batches            --> stock_logs
+  orders             --> order_items         (1 order, banyak item)
+  products           --> order_items         (1 produk, banyak item)
+  products           --> recipes             (1 produk, banyak bahan)
+  ingredients        --> recipes             (1 bahan, di banyak resep)
+  ingredients        --> ingredient_purchases
+  ingredients        --> stock_logs
+
+
+================================================================
+  STRUKTUR FOLDER PROYEK
+================================================================
+
+bruvela-bakehouse/
+|
++-- frontend/                    (Nuxt.js 3)
+|   +-- pages/
+|   |   +-- index.vue                (Dashboard)
+|   |   +-- orders/
+|   |   |   +-- index.vue            (List order)
+|   |   |   +-- [id].vue             (Detail order)
+|   |   |   +-- create.vue           (Buat order baru)
+|   |   +-- recipes/
+|   |   |   +-- index.vue            (List menu & HPP)
+|   |   |   +-- calculator.vue       (Kalkulator produksi)
+|   |   +-- inventory/
+|   |   |   +-- index.vue            (List bahan & stok)
+|   |   |   +-- purchases.vue        (Pembelian bahan)
+|   |   +-- finance/
+|   |   |   +-- index.vue            (Dashboard keuangan)
+|   |   |   +-- journal.vue          (Jurnal kas)
+|   |   +-- reports/
+|   |       +-- index.vue            (Export laporan)
+|   +-- stores/
+|   |   +-- orders.ts
+|   |   +-- inventory.ts
+|   |   +-- finance.ts
+|   +-- composables/
+|   |   +-- useOrders.ts
+|   |   +-- useInventory.ts
+|   +-- components/
+|       +-- StockAlertBadge.vue
+|       +-- OrderStatusTag.vue
+|       +-- RevenueChart.vue
+|
++-- backend/                     (Golang - Gin)
+    +-- cmd/
+    |   +-- main.go
+    +-- internal/
+    |   +-- handler/
+    |   |   +-- order.go
+    |   |   +-- product.go
+    |   |   +-- ingredient.go
+    |   |   +-- finance.go
+    |   |   +-- dashboard.go
+    |   +-- service/
+    |   |   +-- order.go
+    |   |   +-- inventory.go
+    |   |   +-- finance.go
+    |   |   +-- recipe.go
+    |   +-- repository/
+    |   |   +-- order.go
+    |   |   +-- ingredient.go
+    |   |   +-- finance.go
+    |   +-- model/
+    |   |   +-- order.go
+    |   |   +-- product.go
+    |   |   +-- ingredient.go
+    |   |   +-- finance.go
+    |   +-- middleware/
+    |       +-- auth.go
+    |       +-- cors.go
+    +-- pkg/
+    |   +-- auth/                (JWT helper)
+    |   +-- export/              (Excel, PDF generator)
+    |   +-- validator/
+    +-- migrations/              (SQL files)
+    +-- config/
+        +-- config.go
+
+
+================================================================
+  API ENDPOINTS (Golang Backend)
+================================================================
+
+Auth:
+  POST   /api/v1/auth/login
+  POST   /api/v1/auth/logout
+  GET    /api/v1/auth/me
+
+Orders:
+  GET    /api/v1/orders              (list + filter + pagination)
+  POST   /api/v1/orders              (buat order baru)
+  GET    /api/v1/orders/:id          (detail order)
+  PATCH  /api/v1/orders/:id/status   (update status produksi)
+  PATCH  /api/v1/orders/:id/pay      (update status bayar)
+  DELETE /api/v1/orders/:id
+
+Products (Menu):
+  GET    /api/v1/products
+  POST   /api/v1/products
+  GET    /api/v1/products/:id
+  PUT    /api/v1/products/:id
+  DELETE /api/v1/products/:id
+
+Recipes:
+  GET    /api/v1/products/:id/recipe
+  PUT    /api/v1/products/:id/recipe
+  POST   /api/v1/recipes/calculator  (hitung kebutuhan bahan)
+
+Ingredients (Inventory):
+  GET    /api/v1/ingredients
+  POST   /api/v1/ingredients
+  GET    /api/v1/ingredients/:id
+  PUT    /api/v1/ingredients/:id
+  DELETE /api/v1/ingredients/:id
+  GET    /api/v1/ingredients/alerts  (stok yang perlu restock)
+
+Ingredient Purchases:
+  GET    /api/v1/ingredient-purchases
+  POST   /api/v1/ingredient-purchases
+  GET    /api/v1/ingredient-purchases/:id
+
+Batches:
+  GET    /api/v1/batches
+  POST   /api/v1/batches
+  GET    /api/v1/batches/:id
+  PATCH  /api/v1/batches/:id/close
+
+Finance:
+  GET    /api/v1/journal
+  POST   /api/v1/journal
+  GET    /api/v1/finance/summary
+  GET    /api/v1/finance/profit-loss
+
+Dashboard:
+  GET    /api/v1/dashboard/summary
+  GET    /api/v1/dashboard/charts/sales
+  GET    /api/v1/dashboard/charts/finance
+
+Reports:
+  GET    /api/v1/reports/orders/export    (Excel download)
+  GET    /api/v1/reports/finance/export   (Excel download)
+  GET    /api/v1/reports/stock/export
+
+
+================================================================
+  TIMELINE PENGERJAAN (ESTIMASI SOLO DEV)
+================================================================
+
+  Minggu 1-2  : Setup project, auth (JWT), CRUD produk & bahan
+  Minggu 3-4  : Modul pemesanan (order + order_items)
+  Minggu 5-6  : Inventory (stok, pembelian, auto-deduct)
+  Minggu 7-8  : Resep + kalkulator HPP + margin analyzer
+  Minggu 9-10 : Finance + jurnal kas + laporan per batch
+  Minggu 11   : Dashboard + grafik (Chart.js)
+  Minggu 12   : Export laporan Excel & PDF
+  Minggu 13   : Deploy + dokumentasi API (Swagger/Postman)
+  Minggu 14   : Polish UI + testing + bug fix
+
+  Total: sekitar 3-4 bulan pengerjaan part-time (2-3 jam/hari)
+
+
+================================================================
+  NILAI PORTOFOLIO FREELANCE
+================================================================
+
+Kenapa proyek ini kuat untuk portofolio:
+
+  1. REAL BUSINESS PROBLEM
+     Bukan tutorial to-do list biasa. Ini sistem nyata untuk UMKM
+     dengan data aktual (68+ order, 22 bahan, HPP riil Bruvela).
+
+  2. FULL-STACK MODERN
+     Nuxt 3 + Golang adalah kombinasi yang dicari perusahaan dan klien.
+     Golang = performa, Nuxt = SSR + SEO friendly.
+
+  3. DOMAIN KNOWLEDGE
+     Membuktikan kemampuan memahami kebutuhan bisnis klien,
+     bukan hanya bisa coding.
+
+  4. FITUR PRODUCTION-READY
+     - JWT Authentication + role-based access
+     - Export Excel/PDF
+     - Real-time stock alerts
+     - Multi-status workflow
+     - Pagination & filtering
+     - Audit trail (stock_logs, journal_entries)
+
+  5. CLEAN ARCHITECTURE
+     Golang: handler -> service -> repository pattern (testable)
+     Nuxt: composables + Pinia store separation
+
+  6. BISA DIPITCH KE UMKM LAIN
+     Bakery, kedai kopi, katering, toko kue — masalahnya sama.
+     1 proyek bisa jadi template untuk SaaS UMKM kecil-kecilan.
+
+  Saran tambahan untuk portofolio:
+  - Tambahkan README lengkap di GitHub
+  - Buat video demo singkat (2-3 menit) di YouTube
+  - Deploy live demo (pakai data dummy)
+  - Tulis blog post tentang proses pengembangan
+
+
+================================================================
+  REFERENSI & DOKUMENTASI
+================================================================
+
+  Nuxt.js 3       : https://nuxt.com/docs
+  Gin (Golang)    : https://gin-gonic.com/docs/
+  Fiber (Golang)  : https://docs.gofiber.io/
+  GORM            : https://gorm.io/docs/
+  Pinia           : https://pinia.vuejs.org/
+  Tailwind CSS    : https://tailwindcss.com/docs
+  Chart.js        : https://www.chartjs.org/docs/
+  excelize        : https://xuri.me/excelize/en/
+  Vercel Deploy   : https://vercel.com/docs
+  Railway Deploy  : https://docs.railway.app/
+  Supabase        : https://supabase.com/docs
+  Upstash Redis   : https://upstash.com/docs/redis
+  golang-jwt      : https://github.com/golang-jwt/jwt
+  GORM Migrations : https://gorm.io/docs/migration.html
+
+
+================================================================
+  Dibuat berdasarkan analisis file: BRUVELA_BAKEHOUSE_BATCH_3.xlsx
+  Untuk keperluan: perencanaan proyek + portofolio freelance
+================================================================
